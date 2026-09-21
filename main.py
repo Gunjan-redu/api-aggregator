@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi import Query
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from  pydantic import ConfigDict, Field
 
 app = FastAPI()
 
@@ -19,6 +20,17 @@ class WeatherOut(BaseModel):
     temperature: float
     windspeed: float
 
+
+class CurrencyOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_currency: str = Field(alias="from")
+    to: str
+    rate: float
+    converted: float
+
+
+
+
 class Article(BaseModel):
     title: str
     source: str
@@ -28,7 +40,12 @@ class NewsOut(BaseModel):
     country: str
     articles : list[Article]
 
-
+class AggregateOut(BaseModel):
+    city: str
+    weather: WeatherOut | None
+    usd_to_inr: float | None        # or a small CurrencyOut slice
+    news: NewsOut | None
+    errors: list[str] = []
 
 def fetch_json(url:str, name: str)-> dict:
     try:
@@ -53,9 +70,8 @@ def get_coordinates(city:str) -> tuple[float, float, str]:
     row = res["results"][0]
     return row["latitude"], row["longitude"], row["name"]
 
-@app.get("/weather", response_model=WeatherOut)
-def get_weather(city :str):
-    city = city.title()
+
+def get_weather_data(city:str) -> dict:
     lat, lon, name = get_coordinates(city)
 
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
@@ -64,22 +80,31 @@ def get_weather(city :str):
     return {"city": name, **r["current_weather"]}
 
 
+@app.get("/weather", response_model=WeatherOut)
+def get_weather(city :str):
+    return get_weather_data(city.title())
 
-@app.get("/currency")
-def currency_conversion(from_currency: str = Query(alias="from"), to: str = Query(...) , amount : float = 1.0):
+def currency_conversion_data(from_currency:str,to:str,  amount:float) ->dict :
     url = f"https://api.frankfurter.dev/v1/latest?base={from_currency}&symbols={to}"
     res = fetch_json(url, "currency conversion")
     rate = res["rates"][to]
-    return {"from": from_currency, "to": to, "rate": rate, "converted" : amount * rate}
+    return {"from": from_currency, "to": to, "rate": rate, "converted": amount * rate}
 
 
+@app.get("/currency", response_model= CurrencyOut)
+def currency_conversion(from_currency: str = Query(alias="from"), to: str = Query(...) , amount : float = 1.0):
+    return currency_conversion_data(from_currency.upper(), to.upper(), amount)
 
-@app.get("/news", response_model= NewsOut)
-def get_news(country: str):
+def get_news_data(country: str):
     country = country.lower()
     url = f"https://newsapi.org/v2/top-headlines?country={country}&apiKey={settings.news_api_key}&pageSize=5"
     res_articles = fetch_json(url, "NewsAPI")["articles"]
 
-    articles = [{"title": a["title"] , "source": a["source"]["name"], "url": a["url"]  }      for a in res_articles[ : 5]]
+    articles = [{"title": a["title"], "source": a["source"]["name"], "url": a["url"]} for a in res_articles[: 5]]
 
-    return {"country": country, "articles" :articles}
+    return {"country": country, "articles": articles}
+
+
+@app.get("/news", response_model= NewsOut)
+def get_news(country: str):
+    return get_news_data(country)
