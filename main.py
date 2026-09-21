@@ -108,3 +108,26 @@ def get_news_data(country: str):
 @app.get("/news", response_model= NewsOut)
 def get_news(country: str):
     return get_news_data(country)
+
+@app.get("/aggregate", response_model=AggregateOut)
+def aggregate(city: str):
+    city = city.title()
+    result = {"city": city, "weather": None, "usd_to_inr": None, "news": None, "errors": []}
+
+    try:
+       result["weather"]=  get_weather_data(city)
+    except HTTPException as e:
+        result["errors"].append(f"weather: {e.detail}")
+
+    try:
+        result["usd_to_inr"] = currency_conversion_data("USD", "INR", 1)["rate"]
+    except HTTPException as e:
+        result["errors"].append(f"currency conversion: {e.detail}")
+
+    try:
+        result["news"] = get_news_data('us')
+    except HTTPException as e:
+        result["errors"].append(f"news: {e.detail}")
+
+
+    return result
