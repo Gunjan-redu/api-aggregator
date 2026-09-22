@@ -1,3 +1,5 @@
+import time
+
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -43,11 +45,25 @@ class NewsOut(BaseModel):
 class AggregateOut(BaseModel):
     city: str
     weather: WeatherOut | None
-    usd_to_inr: float | None        # or a small CurrencyOut slice
+    usd_to_inr: float | None
     news: NewsOut | None
     errors: list[str] = []
 
+
+_cache: dict[str, tuple[float, dict]] = {}
+CACHE_TTL = 300
+
+
+
 def fetch_json(url:str, name: str)-> dict:
+
+    now = time.time()
+
+    if url in _cache and _cache[url][0] > now:
+        print(f"cache HIT: {url[:70]}")
+        return _cache[url][1]
+    print(f"cache MISS: {url[:70]}")
+
     try:
         res = httpx.get(url, timeout=5.0)
         res.raise_for_status()
@@ -57,8 +73,9 @@ def fetch_json(url:str, name: str)-> dict:
 
     except httpx.HTTPError:
         raise  HTTPException(status_code= 502, detail=f"{name} service not available")
-
-    return res.json()
+    data = res.json()
+    _cache[url] = (now+CACHE_TTL, data)
+    return data
 
 
 def get_coordinates(city:str) -> tuple[float, float, str]:
@@ -113,7 +130,7 @@ def get_news(country: str):
 def aggregate(city: str):
     city = city.title().strip()
 
-    lat, lon, name = get_coordinates(city)
+    _lat, _lon, name = get_coordinates(city)
     result = {"city": city, "weather": None, "usd_to_inr": None, "news": None, "errors": []}
 
     try:
