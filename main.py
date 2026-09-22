@@ -111,7 +111,9 @@ def get_news(country: str):
 
 @app.get("/aggregate", response_model=AggregateOut)
 def aggregate(city: str):
-    city = city.title()
+    city = city.title().strip()
+
+    lat, lon, name = get_coordinates(city)
     result = {"city": city, "weather": None, "usd_to_inr": None, "news": None, "errors": []}
 
     try:
