@@ -67,17 +67,8 @@ that simulate upstream failures — no network needed for those.
 
 ## What I learned building this
 
-<!-- REPLACE EACH LINE WITH 1-2 SENTENCES IN YOUR OWN WORDS.
-     These bullets are also the outline of the blog post. -->
-
-- **Chaining API calls:** [the two-hop geocoding chain — one API's output
-  feeding the next one's input]
-- **Whose failure is it:** [500 vs 502 vs 504 — translating upstream
-  failures into honest status codes instead of blaming my own server]
-- **Graceful degradation:** [the /aggregate design decision — bad input
-  kills the request, upstream failures degrade; what the keyboard-mash
-  city taught me]
-- **Caching:** [the TTL cache — what it saves, and its honest limits:
-  dies with the process, not shared across workers]
-- **Testing with mocks:** [replacing httpx with a fake so tests can stage
-  disasters — testing the fire drill without burning the building]
+- **Chaining API calls:** Connected the 2 API's in a chain, latitudes and longitudes of a city are extracted from the geocoding-api, which are then given to weather API to get the weather of the city. So, the output of one API is the input for another one.
+- **Whose failure is it:** Set up a system to handle API failure in a transparent way. If a request fails we get a 502 if the external API answered with an error, 504 if it timed out, and 500 only if it's genuinely my server's own bug.
+- **Graceful degradation:** In the /aggregate endpoint if an unknown city is the input, it will kill the request. Also, if any of the other API's aren't responding then we get the responses from the ones that do respond. In the response we show all the successful responses of the API, and the names of those which failed.
+- **Caching:** Used a TTL cache, responses are remembered for 5 minutes, so repeated identical calls are served from memory instead of re-asking the upstream. But, it has limits- it will reset if the app is stopped. Can't be used by other services since it lives in the process.
+- **Testing with mocks:** Replaced httpx with a fake during tests, so I can stage upstream disasters — timeouts, 500s — on command and verify my error handling, without any real service being down.
